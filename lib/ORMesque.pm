@@ -16,7 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.103190;# VERSION
+our $VERSION = 1.103630;# VERSION
 
 
 
@@ -624,7 +624,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.103190
+version 1.103630
 
 =head1 SYNOPSIS
 

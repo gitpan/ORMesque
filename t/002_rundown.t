@@ -1,19 +1,22 @@
 use strict;
 use warnings;
-use Test::More tests => 56, import => ['!pass'];
+use Test::More import => ['!pass'];
 use Test::Exception;
 use FindBin;
 
 BEGIN {
+    eval { require DBD::SQLite };
+    
+    if ($@) {
+        plan skip_all => 'DBD::SQLite is required to run these tests';
+    }
+    else {
+        plan tests => 56;
+    }    
     use_ok 'ORMesque';
 }
 
-eval { require DBD::SQLite };
-if ($@) {
-    plan skip_all => 'DBD::SQLite is required to run these tests';
-}
-
-diag 'basic operations';
+#diag 'basic operations';
 
 my $db = ORMesque->new('dbi:SQLite:' . "$FindBin::Bin/000_database.db");
 my $user = $db->user;
@@ -49,7 +52,7 @@ ok $user->create($user->current), 'made a new Bob';
 ok $user->delete({ name => { like => 'Bob%' } }), 'deleted all Bob look alikes';
 ok !$user->read->count, 'no more Bobs';
 
-diag 'the 3 Bobs';
+#diag 'the 3 Bobs';
 
 ok $user->name('Bob'), 'yo bob';
 ok $user->age(20), 'you 20';
@@ -72,7 +75,7 @@ ok $user->read->count eq 1, 'And then there was one';
 ok $user->first, 'you are the first';
 ok $user->last, 'and the last';
 
-diag 'functions tests';
+#diag 'functions tests';
 
 ok $user->clear, 'cleaned house';
 ok $user->name('Johnny'), 'preparing the new person';

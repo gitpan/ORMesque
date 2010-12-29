@@ -111,7 +111,8 @@
 	unless ($self->{dont_disconnect}) {
 	    # Conditional, because destruction order is not guaranteed
 	    # during global destruction.
-	    $self->{dbh}->disconnect() if defined $self->{dbh};
+	    # $self->{dbh}->disconnect() if defined $self->{dbh};
+	    eval { $self->{dbh}->disconnect() if defined $self->{dbh} };
 	}
     
 	_swap(
@@ -511,7 +512,7 @@ DBIx::Simple
 
 =head1 VERSION
 
-version 1.103190
+version 1.103630
 
 =head1 AUTHOR
 

@@ -26,7 +26,7 @@ my %WriteMakefileArgs = (
     'SQL::Abstract::Limit' => '0',
     'SQL::Interp' => '0'
   },
-  'VERSION' => '1.103190',
+  'VERSION' => '1.103630',
   'test' => {
     'TESTS' => 't/*.t'
   }

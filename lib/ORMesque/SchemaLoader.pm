@@ -7,7 +7,7 @@ use warnings;
 
 use DBI;
 
-our $VERSION = 1.103630;# VERSION
+our $VERSION = 1.110060;# VERSION
 
 
 sub new {
@@ -117,7 +117,7 @@ ORMesque::SchemaLoader - ORMesque Database Schema Loader
 
 =head1 VERSION
 
-version 1.103630
+version 1.110060
 
 =head1 SYNOPSIS
 

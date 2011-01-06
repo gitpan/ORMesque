@@ -2,7 +2,7 @@ NAME
     ORMesque - Lightweight To-The-Point ORM
 
 VERSION
-    version 1.103630
+    version 1.110060
 
 SYNOPSIS
         my $db = ORMesque->new('dbi:mysql:foo', 'root');
@@ -411,6 +411,9 @@ UTILITIES
     querying language, it also provides access to SQL::Interp for good
     measure. For an in-depth look at what you can do with these utilities,
     please check out DBIx::Simple::Examples.
+
+  error
+    The error function is used to access the $DBI::errstr variable.
 
   query
     The query function provides a simplified interface to DBI, Perl's

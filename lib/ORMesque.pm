@@ -16,7 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.103630;# VERSION
+our $VERSION = 1.110060;# VERSION
 
 
 
@@ -561,6 +561,11 @@ sub rows {
 }
 
 
+sub error {
+    return shift->{dbh}->error(@_);
+}
+
+
 sub query {
     return shift->dbix->query(@_);
 }
@@ -624,7 +629,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.103630
+version 1.110060
 
 =head1 SYNOPSIS
 
@@ -1063,6 +1068,10 @@ ORMesque has as its sub-classes L<DBIx::Simple> and L<SQL::Abstract>
 as its querying language, it also provides access to L<SQL::Interp> for good measure.
 For an in-depth look at what you can do with these utilities, please check out
 L<DBIx::Simple::Examples>.
+
+=head2 error
+
+The error function is used to access the $DBI::errstr variable.
 
 =head2 query
 

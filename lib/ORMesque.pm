@@ -16,7 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.110060;# VERSION
+our $VERSION = 1.110170;# VERSION
 
 
 
@@ -388,7 +388,7 @@ sub update {
 
 sub delete {
     my $dbo   = shift;
-    my $where = shift || {};
+    my $where = shift;
     my $table = $dbo->{table};
 
     # process where clause
@@ -629,7 +629,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.110060
+version 1.110170
 
 =head1 SYNOPSIS
 

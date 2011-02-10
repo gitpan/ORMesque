@@ -4,7 +4,6 @@ META.yml
 Makefile.PL
 README
 README.txt
-TODO
 dist.ini
 lib/ORMesque.pm
 lib/ORMesque/DBIxSimpleHack.pm
@@ -20,4 +19,5 @@ t/004_joindata.t
 t/005_hasmod_dbix_simple.t
 t/006_pagination.t
 t/007_error_handling.t
+t/008_namespaces.t
 t/lib/Dancer/Plugin/Database.pm

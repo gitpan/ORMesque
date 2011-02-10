@@ -18,4 +18,4 @@ requires:
   SQL::Abstract: 0
   SQL::Abstract::Limit: 0
   SQL::Interp: 0
-version: 1.110170
+version: 1.110410

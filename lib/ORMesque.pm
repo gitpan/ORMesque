@@ -16,7 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.110170;# VERSION
+our $VERSION = 1.110410;# VERSION
 
 
 
@@ -26,9 +26,18 @@ sub new {
     return $Cache if $Cache;
 
     my @dsn = @_;
+    my $nsp = undef;
+    
+    # check if a namespace has been defined
+    if (ref $dsn[$#dsn]) {
+        if (defined $dsn[$#dsn]->{NameSpace}) {
+            $nsp = $dsn[$#dsn]->{NameSpace};
+            delete $dsn[$#dsn]->{NameSpace};
+        }
+    }
 
-    my $dbh = DBI->connect(@dsn) or die $DBI::errstr;
-    my $cfg = {driver => $dbh->get_info(17)};
+    my $dbh = ORMesque->connect(@dsn) or die $DBI::errstr;
+    my $cfg = {driver => $dbh->{dbh}->get_info(17)};
 
     die "Can't make out your database driver" unless $cfg->{driver};
 
@@ -36,21 +45,24 @@ sub new {
     my $this = {};
 
     bless $self, $class;
+    
+    # explicitly set the namespace
+    defined $nsp ? $self->namespace($nsp) : $self->namespace($class);
 
     warn "Error connecting to the database..." unless $dbh;
     warn "No database driver specified in the configuration file"
       unless $cfg->{driver};
 
     # POSTGRESQL CONFIGURATION
-    $this = ORMesque::SchemaLoader->new($dbh)->mysql
+    $this = ORMesque::SchemaLoader->new($dbh->{dbh})->mysql
       if lc($cfg->{driver}) =~ '^postgre(s)?(ql)?$';
 
     # MYSQL CONFIGURATION
-    $this = ORMesque::SchemaLoader->new($dbh)->mysql
+    $this = ORMesque::SchemaLoader->new($dbh->{dbh})->mysql
       if lc($cfg->{driver}) eq 'mysql';
 
     # SQLite CONFIGURATION
-    $this = ORMesque::SchemaLoader->new($dbh)->sqlite
+    $this = ORMesque::SchemaLoader->new($dbh->{dbh})->sqlite
       if lc($cfg->{driver}) eq 'sqlite';
 
     $self->{schema} = $this->{schema};
@@ -58,7 +70,7 @@ sub new {
       unless @{$self->{schema}->{tables}};
 
     # setup reuseable connection using DBIx::Simple
-    $self->{dbh} = DBIx::Simple->connect($dbh) or die DBIx::Simple->error;
+    $self->{dbh} = DBIx::Simple->connect($dbh->{dbh}) or die DBIx::Simple->error;
     $self->{dbh}->result_class = 'DBIx::Simple::Result';
     $self->{dsn} = [@dsn];
 
@@ -71,12 +83,12 @@ sub new {
 
     foreach my $table (@{$self->{schema}->{tables}}) {
 
-        my $class        = ref($self);
+        my $class        = $self->namespace;
         my $method       = $class . "::" . lc $table;
         my $package_name = $class . "::" . ucfirst $table;
         my $package      = "package $package_name;" . q|
             
-            use base 'ORMesque';
+            use base '| . $class . q|';
             
             sub new {
                 my ($class, $base, $table) = @_;
@@ -89,6 +101,7 @@ sub new {
                 $self->{collection} = [];
                 $self->{cursor}     = 0;
                 $self->{current}    = {};
+                $self->{namespace}  = $base->{namespace};
                 $self->{schema}     = $base->{schema};
                 $self->{dbh}        = $base->dbix();
                 $self->{dsn}        = $base->{dsn};
@@ -144,6 +157,13 @@ sub _protect_sql {
     else {
         return map {"$stag$_$etag"} @_;
     }
+}
+
+
+sub namespace {
+    my ($dbo, $namespace) = @_;
+    $dbo->{namespace} = $namespace if defined $namespace;
+    return $dbo->{namespace};
 }
 
 
@@ -388,7 +408,7 @@ sub update {
 
 sub delete {
     my $dbo   = shift;
-    my $where = shift;
+    my $where = shift || {};
     my $table = $dbo->{table};
 
     # process where clause
@@ -629,7 +649,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.110170
+version 1.110410
 
 =head1 SYNOPSIS
 
@@ -643,12 +663,12 @@ version 1.110170
             ->page(1, 25)
             ->read({ column => 'value' });
     
-    return to_json $ta->join($tb);
+    return $ta->join($tb); # returns an aggregated arrayref of hashefs
 
-ORMesque is a lightweight ORM for Dancer supporting any database
-listed under L<ORMesque::SchemaLoader> making it a great alternative when you
-don't have the time, need or desire to learn L<DBIx::Class>. ORMesque is an
-object relational mapper for Dancer that provides a database connection to the
+ORMesque is a lightweight ORM supporting any database listed under
+L<ORMesque::SchemaLoader> making it a great alternative when you don't have
+the time, need or desire to learn/utilize L<DBIx::Class> or the like. ORMesque
+is an object relational mapper that provides a database connection to the
 database of your choice and automatically creates objects and accessors for that
 database and its tables and columns. ORMesque uses L<SQL::Abstract> querying
 syntax. More usage examples...
@@ -693,6 +713,32 @@ syntax. More usage examples...
     $user->collection; # returns an array of hashrefs
     $user->current;    # return a hashref of the current row in the collection
 
+Occassionally you may want to create application Models using ORMesque and venture
+beyond the standard CRUD methods, creating classes for each table and extending its
+methods. The following is an example of how this should be done using ORMesque.
+
+    package MyApp::Model;
+    use base 'ORMesque';
+    # create your base Model - lib/MyApp/Model.pm
+    
+    package MyApp::Model::Cd;
+    use base 'MyApp::Model';
+    # create your table specific Model - lib/MyApp/Model/Cd.pm
+    # note the model should be named after the table, all lowercase, capitalized,
+    # with no special characters. If package name is one of the auto-generated
+    # classes, all relevant methods and settings will be set automatically.
+    
+    sub write_cd {
+        $self = shift;
+        ...
+        $self->create({ ... });
+        return $self;
+    }
+    
+    ...
+    
+    1;
+
 =head2 dbi
 
     The dbi method/keyword instantiates a new ORMesque instance
@@ -701,93 +747,114 @@ syntax. More usage examples...
     
     my $db = dbi;
 
+=head2 namespace
+
+    The namespace() method returns the class naming scheme (if specified with
+    *new*), being used used when database table classes are created. 
+    
+    my $db = ORMesque->new(...);
+    
+    $db->namespace;
+
 =head2 reset
 
-    Once the dbi() keyword analyzes the specified database, the schema is cached
+    Once the reset() method analyzes the specified database, the schema is cached
     to for speed and performance. Occassionally you may want to re-read the
     database schema.
     
-    dbi->reset;
-    my $db = dbi;
+    my $db = ORMesque->new(...);
+    $db->reset;
 
 =head2 next
 
-    The next method instructs the database object to continue to the next
+    The next() method instructs the database object to continue to the next
     row if it exists.
     
-    dbi->table->next;
+    my $table = ORMesque->new(...)->table;
     
-    while (dbi->table->next) {
+    while ($table->next) {
         ...
     }
 
 =head2 first
 
-    The first method instructs the database object to continue to return the first
+    The first() method instructs the database object to continue to return the first
     row in the resultset.
     
-    dbi->table->first;
+    my $table = ORMesque->new(...)->table;
+    $table->first;
 
 =head2 last
 
-    The last method instructs the database object to continue to return the last
+    The last() method instructs the database object to continue to return the last
     row in the resultset.
     
-    dbi->table->last;
+    my $table = ORMesque->new(...)->table;
+    $table->last;
 
 =head2 collection
 
-    The collection method return the raw resultset object.
+    The collection() method return the raw resultset object.
     
-    dbi->table->collection;
+    my $table = ORMesque->new(...)->table;
+    $table->collection;
 
 =head2 current
 
-    The current method return the raw row resultset object of the position in
+    The current() method return the raw row resultset object of the position in
     the resultset collection.
     
-    dbi->table->current;
+    my $table = ORMesque->new(...)->table;
+    $table->current;
 
 =head2 clear
 
-    The clear method empties all resultset containers. This method should be used
+    The clear() method empties all resultset containers. This method should be used
     when your ready to perform another operation (start over) without initializing
     a new object.
     
-    dbi->table->clear;
+    my $table = ORMesque->new(...)->table;
+    $table->clear;
 
 =head2 key
 
-    The key method finds the database objects primary key if its defined.
+    The key() method finds the database objects primary key if its defined.
     
-    dbi->table->key;
+    my $table = ORMesque->new(...)->table;
+    $table->key;
 
 =head2 select
 
-    The select method defines specific columns to be used in the generated
+    The select() method defines specific columns to be used in the generated
     SQL query. This useful for database tables that have lots of columns
     where only a few are actually needed.
     
-    my $table = dbi->select('foo', 'bar')->read();
+    my $table = ORMesque->new(...)->table
+    $table->select('foo', 'bar')->read();
 
 =head2 return
 
-    The return method queries the database for the last created object(s).
+    The return() method queries the database for the last created object(s).
     It is important to note that while return() can be used in most cases
     like the last_insert_id() to fetch the recently last created entry,
     function, you should not use it that way unless you know exactly what
     this method does and what your database will return.
     
-    my $new_record = dbi->table->create(...)->return();
+    my $new = ORMesque->new(...)->table->create(...)->return();
+    $new->column
+    
+    ..or..
+    
+    my $rec = $new->current;
 
 =head2 count
 
-    The count method returns the number of items in the resultset of the
+    The count() method returns the number of items in the resultset of the
     object it's called on. Note! If you make changes to the database, you
     will need to call read() before calling count() to get an accurate
     count as count() operates on the current collection.
     
-    my $count = dbi->table->read->count;
+    my $count = ORMesque->new(...)->table->read->count;
 
 =head2 create
 
@@ -797,12 +864,12 @@ syntax. More usage examples...
     The create method creates a new entry in the datastore.
     takes 1 arg: hashref (SQL::Abstract fields parameter)
     
-    dbi->table->create({
+    ORMesque->new(...)->table->create({
         'column_a' => 'value_a',
     });
     
     # create a copy of an existing record
-    my $user = dbi->users;
+    my $user = ORMesque->new(...)->users;
     $user->read;
     $user->full_name_column('Copy of ' . $user->full_name);
     $user->user_name_column('foobarbaz');
@@ -822,21 +889,21 @@ syntax. More usage examples...
     arg 1: hashref (SQL::Abstract where parameter) or scalar
     arg 2: arrayref (SQL::Abstract order parameter) - optional
     
-    dbi->table->read({
+    ORMesque->new(...)->table->read({
         'column_a' => 'value_a',
     });
     
     .. or read by primary key ..
     
-    dbi->table->read(1);
+    ORMesque->new(...)->table->read(1);
     
     .. or read and limit the resultset ..
     
-    dbi->table->read({ 'column_a' => 'value_a' }, ['orderby_column_a'], $limit, $offset);
+    ORMesque->new(...)->table->read({ 'column_a' => 'value_a' }, ['orderby_column_a'], $limit, $offset);
     
     .. or return a paged resultset ..
     
-    dbi->table->page(1, 25)->read;
+    ORMesque->new(...)->table->page(1, 25)->read;
 
 =head2 update
 
@@ -846,7 +913,7 @@ syntax. More usage examples...
     arg 1: hashref (SQL::Abstract fields parameter)
     arg 2: arrayref (SQL::Abstract where parameter) or scalar - optional
     
-    dbi->table->update({
+    ORMesque->new(...)->table->update({
         'column_a' => 'value_a',
     },{
         'where_column_a' => '...'
@@ -854,7 +921,7 @@ syntax. More usage examples...
     
     or
     
-    dbi->table->update({
+    ORMesque->new(...)->table->update({
         'column_a' => 'value_a',
     }, 1);
 
@@ -864,19 +931,19 @@ syntax. More usage examples...
     thus requires a where clause. If you intentionally desire to empty the entire
     database then you may use the delete_all method.
     
-    dbi->table->delete({
+    ORMesque->new(...)->table->delete({
         'column_a' => 'value_a',
     });
     
     or
     
-    dbi->table->delete(1);
+    ORMesque->new(...)->table->delete(1);
 
 =head2 delete_all
 
     The delete_all method is use to intentionally empty the entire database table.
     
-    dbi->table->delete_all;
+    ORMesque->new(...)->table->delete_all;
 
 =head2 join
 
@@ -890,7 +957,7 @@ that is the need we address. The join method "Does Not Execute Any SQL", in-fact
 the join method is meant to be called after the desired resultsets have be gathered.
 The join method is merely an aggregator of result sets.
 
-    my ($cd, $artist) = (dbi->cd, dbi->artist);
+    my ($cd, $artist) = (ORMesque->new(...)->cd, ORMesque->new(...)->artist);
 
     $artist->read({ id => $aid });
     $cd->read({ artist => $aid });
@@ -956,14 +1023,14 @@ to include as well as supply an alias if desired. The following is an example of
     my $page = 1; # page of data to be returned
     my $rows = 100; # number of rows to return
     
-    dbi->table->page($page, $rows)->read;
+    ORMesque->new(...)->table->page($page, $rows)->read;
 
 =head2 pager
 
     The pager method provides access to the Data::Page object used in pagination.
     Please see L<Data::Page> for more details...
     
-    $pager = dbi->table->pager;
+    $pager = ORMesque->new(...)->table->pager;
     
     $pager->first_page;
     $pager->last_page;
@@ -985,20 +1052,20 @@ resultset.
 
     Binds the columns returned from the query to variable(s)
     
-    dbi->table->read(1)->into(my ($foo, $bar));
+    ORMesque->new(...)->table->read(1)->into(my ($foo, $bar));
 
 =head2 list
 
     Fetches a single row and returns a list of values. In scalar context,
     returns only the last value.
     
-    my @values = dbi->table->read(1)->list;
+    my @values = ORMesque->new(...)->table->read(1)->list;
 
 =head2 array
 
     Fetches a single row and returns an array reference.
     
-    my $row = dbi->table->read(1)->array;
+    my $row = ORMesque->new(...)->table->read(1)->array;
     print $row->[0];
 
 =head2 hash
@@ -1006,7 +1073,7 @@ resultset.
     Fetches a single row and returns a hash reference.
     Keys are lower cased if lc_columns was true when the query was executed.
     
-    my $row = dbi->table->read(1)->hash;
+    my $row = ORMesque->new(...)->table->read(1)->hash;
     print $row->{id};
 
 =head2 flat
@@ -1014,7 +1081,7 @@ resultset.
     Fetches all remaining rows and returns a flattened list.
     In scalar context, returns an array reference.
     
-    my @records = dbi->table->read(1)->flat;
+    my @records = ORMesque->new(...)->table->read(1)->flat;
     print $records[0];
 
 =head2 arrays
@@ -1022,7 +1089,7 @@ resultset.
     Fetches all remaining rows and returns a list of array references.
     In scalar context, returns an array reference.
     
-    my $rows = dbi->table->read(1)->arrays;
+    my $rows = ORMesque->new(...)->table->read(1)->arrays;
     print $rows->[0];
 
 =head2 hashes
@@ -1031,7 +1098,7 @@ resultset.
     In scalar context, returns an array reference.
     Keys are lower cased if lc_columns was true when the query was executed.
     
-    my $rows = dbi->table->read(1)->hashes;
+    my $rows = ORMesque->new(...)->table->read(1)->hashes;
     print $rows->[0]->{id};
 
 =head2 map_hashes
@@ -1040,7 +1107,7 @@ resultset.
     In scalar context, returns a hash reference.
     In list context, returns interleaved keys and values.
     
-    my $customer = dbi->table->read->map_hashes('id');
+    my $customer = ORMesque->new(...)->table->read->map_hashes('id');
     # $customers = { $id => { name => $name, location => $location } }
 
 =head2 map_arrays
@@ -1049,7 +1116,7 @@ resultset.
     In scalar context, returns a hash reference.
     In list context, returns interleaved keys and values.
     
-    my $customer = dbi->table->read->map_arrays(0);
+    my $customer = ORMesque->new(...)->table->read->map_arrays(0);
     # $customers = { $id => [ $name, $location ] }
 
 =head2 rows
@@ -1060,7 +1127,7 @@ resultset.
     rows are returned. MySQL does provide this information. See DBI for a
     detailed explanation.
     
-    my $changes = dbi->table->insert(dbi->table->current)->rows;
+    my $changes = ORMesque->new(...)->table->insert(ORMesque->new(...)->table->current)->rows;
 
 =head1 UTILITIES
 

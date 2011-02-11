@@ -180,7 +180,8 @@
     
     sub error {
 	my ($self) = @_;
-	return 'DBI error: ' . (ref $self ? $self->{dbh}->errstr : $DBI::errstr);
+	my $error  = (ref $self ? $self->{dbh}->errstr : $DBI::errstr);
+	return 'DBI error: ' . ( $error || '' );
     }
     
     sub dbh            { $_[0]->{dbh}             }
@@ -515,7 +516,7 @@ DBIx::Simple
 
 =head1 VERSION
 
-version 1.110410
+version 1.110420
 
 =head1 AUTHOR
 

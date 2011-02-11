@@ -16,8 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.110410;# VERSION
-
+our $VERSION = 1.110420;# VERSION
 
 
 sub new {
@@ -85,7 +84,17 @@ sub new {
 
         my $class        = $self->namespace;
         my $method       = $class . "::" . lc $table;
-        my $package_name = $class . "::" . ucfirst $table;
+        my $classtable   = $table;
+           
+           if ($classtable =~ /[\-\_]/) {
+                $classtable = join '', map { ucfirst lc $_ }
+                    split /[\-\_]/, $classtable;
+           }
+           else {
+                $classtable = ucfirst lc $classtable;
+           }
+        
+        my $package_name = $class . "::" . $classtable;
         my $package      = "package $package_name;" . q|
             
             use base '| . $class . q|';
@@ -144,19 +153,42 @@ sub new {
 }
 
 sub _protect_sql {
-    my $dbo = shift;
+    my ($dbo, @sql) = @_;
+    
     return @_ unless $dbo->{schema}->{escape_string};
+    
+    # set field delimiters
     my ($stag, $etag) =
       length($dbo->{schema}->{escape_string}) == 1
       ? ($dbo->{schema}->{escape_string}, $dbo->{schema}->{escape_string})
       : split //, $dbo->{schema}->{escape_string};
+      
+    my $params = {};
 
-    if ("HASH" eq ref $_[0]) {
-        return {map { ("$stag$_$etag" => $_[0]->{$_}) } keys %{$_[0]}};
+    if ("HASH" eq ref $sql[0]) {
+        $params = {
+            map {
+                if ($_ =~ /[^a-zA-Z\_0-9\s]/) {
+                    ( $_ => $sql[0]->{$_} )
+                }
+                else {
+                    ( "$stag$_$etag" => $sql[0]->{$_} )
+                }
+            }   keys %{$sql[0]}
+        };
     }
     else {
-        return map {"$stag$_$etag"} @_;
+        $params = [ map {
+            if ($_ =~ /[^a-zA-Z\_0-9\s]/) {
+                ($_)
+            }
+            else {
+                "$stag$_$etag"
+            }
+        }   @sql ];
     }
+    
+    return "ARRAY" eq ref $params ? ( @{ $params } ) : $params;
 }
 
 
@@ -174,9 +206,11 @@ sub reset {
 
 sub next {
     my $dbo = shift;
-
+    
+    $dbo->{collection} ||= [];
+    
     my $next =
-      $dbo->{cursor} <= (scalar(@{$dbo->{collection}}) - 1) ? $dbo : undef;
+    $dbo->{cursor} <= (scalar(@{$dbo->{collection}}) - 1) ? $dbo : undef;
     $dbo->{current} = $dbo->{collection}->[$dbo->{cursor}] || {};
     $dbo->{cursor}++;
 
@@ -255,7 +289,16 @@ sub return {
 
 sub count {
     my $dbo = shift;
-    return scalar @{$dbo->{collection}};
+    my $whr = shift;
+    
+    if (defined $whr) {
+        my @columns = $dbo->_protect_sql($dbo->key || '*');
+        my $counter = 'COUNT('. $columns[0] .')';
+        return scalar @{$dbo->select($counter)->read($whr)->{collection}};
+    }
+    else {
+        return scalar @{$dbo->{collection}};
+    }
 }
 
 
@@ -269,7 +312,7 @@ sub create {
       unless keys %{$input};
 
     # add where clause to current for
-    # $dbo->create(..)->return operations
+    # $dbo->create(..); $dbo->return; operations
     if ($input) {
         foreach my $i (keys %{$input}) {
             if (defined $dbo->{current}->{$i}) {
@@ -282,7 +325,7 @@ sub create {
     $dbo->dbix
       ->insert($dbo->_protect_sql($dbo->{table}), $dbo->_protect_sql($input));
 
-    return $dbo;
+    return $dbo->error ? 0 : 1;
 }
 
 
@@ -375,7 +418,7 @@ sub read {
     $dbo->{cursor} = 0;
     $dbo->next;
 
-    return $dbo;
+    return $dbo->error ? 0 : $dbo;
 }
 
 
@@ -402,7 +445,7 @@ sub update {
         $dbo->_protect_sql($where)
     ) if keys %{$input};
 
-    return $dbo;
+    return $dbo->error ? 0 : 1;
 }
 
 
@@ -424,7 +467,7 @@ sub delete {
     $dbo->dbix
       ->delete($dbo->_protect_sql($table), $dbo->_protect_sql($where));
 
-    return $dbo;
+    return $dbo->error ? 0 : 1;
 }
 
 
@@ -434,7 +477,7 @@ sub delete_all {
 
     $dbo->dbix->delete($dbo->_protect_sql($table));
 
-    return $dbo;
+    return $dbo->error ? 0 : 1;
 }
 
 
@@ -582,7 +625,11 @@ sub rows {
 
 
 sub error {
-    return shift->{dbh}->error(@_);
+    my $dbo = shift;
+    my $err = $dbo->{dbh}->error(@_);
+       $err =~ s/^DBI error\:\s+//;
+       $err =~ s/\n+/\, /g;
+    return $err;
 }
 
 
@@ -649,7 +696,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.110410
+version 1.110420
 
 =head1 SYNOPSIS
 
@@ -724,7 +771,13 @@ methods. The following is an example of how this should be done using ORMesque.
     package MyApp::Model::Cd;
     use base 'MyApp::Model';
     # create your table specific Model - lib/MyApp/Model/Cd.pm
-    # note the model should be named after the table, all lowercase, capitalized,
+    # note the model should be named after the table, the naming is as follows:
+    
+    # Schema Table Classes are CamelCased for convention, all class names are
+    # lowercase, capitalized, and have dashed and underscores removed.
+    # for example ...
+    # table 'user_workplace' would generate a class named 'UserWorkspace'
+    
     # with no special characters. If package name is one of the auto-generated
     # classes, all relevant methods and settings will be set automatically.
     
@@ -739,22 +792,16 @@ methods. The following is an example of how this should be done using ORMesque.
     
     1;
 
-=head2 dbi
-
-    The dbi method/keyword instantiates a new ORMesque instance
-    which uses the datasource configuration details in your configuration file
-    to create database objects and accessors.
-    
-    my $db = dbi;
-
 =head2 namespace
 
-    The namespace() method returns the class naming scheme (if specified with
-    *new*), being used used when database table classes are created. 
+    The namespace() method returns the classname being used in the auto-generated
+    database table classes. 
     
-    my $db = ORMesque->new(...);
+    my $a = ORMesque->new(...);
+    my $b = ThisApp->new(...);
     
-    $db->namespace;
+    $a->namespace; # ORMesque
+    $b->namespace; # ThisApp
 
 =head2 reset
 
@@ -840,12 +887,14 @@ methods. The following is an example of how this should be done using ORMesque.
     function, you should not use it that way unless you know exactly what
     this method does and what your database will return.
     
-    my $new = ORMesque->new(...)->table->create(...)->return();
+    my $new = ORMesque->new(...)->table;
+    $new->create(...);
+    $new->return();
     $new->column
     
     ..or..
     
-    my $rec = $new->current;
+    my $rec = $new->current; # current row
 
 =head2 count
 
@@ -854,7 +903,15 @@ methods. The following is an example of how this should be done using ORMesque.
     will need to call read() before calling count() to get an accurate
     count as count() operates on the current collection.
     
-    my $count = ORMesque->new(...)->table->read->count;
+    my $db = ORMesque->new(...)->table;
+    my $count = $db->read->count;
+    
+    Note! The count() method DOES NOT query the database, it merely counts
+    the number of items in the existing resultset. Alternatively to perform a
+    count-type-of query you can use the count($where) syntax:
+    
+    my $db = ORMesque->new(...)->table;
+    my $count = $db->count({ id => 12345});
 
 =head2 create
 

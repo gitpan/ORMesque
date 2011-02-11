@@ -20,4 +20,5 @@ t/005_hasmod_dbix_simple.t
 t/006_pagination.t
 t/007_error_handling.t
 t/008_namespaces.t
+t/count({})cls
 t/lib/Dancer/Plugin/Database.pm

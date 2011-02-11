@@ -2,7 +2,7 @@ NAME
     ORMesque - Lightweight To-The-Point ORM
 
 VERSION
-    version 1.110410
+    version 1.110420
 
 SYNOPSIS
         my $db = ORMesque->new('dbi:mysql:foo', 'root');
@@ -77,8 +77,14 @@ SYNOPSIS
     package MyApp::Model::Cd;
         use base 'MyApp::Model';
         # create your table specific Model - lib/MyApp/Model/Cd.pm
-        # note the model should be named after the table, all lowercase, capitalized,
-        # with no special characters. If package name is one of the auto-generated
+        # note the model should be named after the table, the naming is as follows:
+        
+    # Schema Table Classes are CamelCased for convention, all class names are
+        # lowercase, capitalized, and have dashed and underscores removed.
+        # for example ...
+        # table 'user_workplace' would generate a class named 'UserWorkspace'
+        
+    # with no special characters. If package name is one of the auto-generated
         # classes, all relevant methods and settings will be set automatically.
         
     sub write_cd {
@@ -92,20 +98,15 @@ SYNOPSIS
         
     1;
 
-  dbi
-        The dbi method/keyword instantiates a new ORMesque instance
-        which uses the datasource configuration details in your configuration file
-        to create database objects and accessors.
-        
-    my $db = dbi;
-
   namespace
-        The namespace() method returns the class naming scheme (if specified with
-        *new*), being used used when database table classes are created. 
+        The namespace() method returns the classname being used in the auto-generated
+        database table classes. 
         
-    my $db = ORMesque->new(...);
+    my $a = ORMesque->new(...);
+        my $b = ThisApp->new(...);
         
-    $db->namespace;
+    $a->namespace; # ORMesque
+        $b->namespace; # ThisApp
 
   reset
         Once the reset() method analyzes the specified database, the schema is cached
@@ -181,12 +182,14 @@ SYNOPSIS
         function, you should not use it that way unless you know exactly what
         this method does and what your database will return.
         
-    my $new = ORMesque->new(...)->table->create(...)->return();
+    my $new = ORMesque->new(...)->table;
+        $new->create(...);
+        $new->return();
         $new->column
         
     ..or..
         
-    my $rec = $new->current;
+    my $rec = $new->current; # current row
 
   count
         The count() method returns the number of items in the resultset of the
@@ -194,7 +197,15 @@ SYNOPSIS
         will need to call read() before calling count() to get an accurate
         count as count() operates on the current collection.
         
-    my $count = ORMesque->new(...)->table->read->count;
+    my $db = ORMesque->new(...)->table;
+        my $count = $db->read->count;
+        
+    Note! The count() method DOES NOT query the database, it merely counts
+        the number of items in the existing resultset. Alternatively to perform a
+        count-type-of query you can use the count($where) syntax:
+        
+    my $db = ORMesque->new(...)->table;
+        my $count = $db->count({ id => 12345});
 
   create
         Caveat 1: The create method will remove the primary key if the column

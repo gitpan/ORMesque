@@ -516,7 +516,7 @@ DBIx::Simple
 
 =head1 VERSION
 
-version 1.110421
+version 1.110422
 
 =head1 AUTHOR
 

@@ -16,7 +16,7 @@ use Data::Page;
 
 our $Cache = undef;
 
-our $VERSION = 1.110421;# VERSION
+our $VERSION = 1.110422;# VERSION
 
 
 sub new {
@@ -104,6 +104,7 @@ sub new {
                 my $self            = {};
                 bless $self, $class;
                 $self->{table}      = $table;
+                $self->{columns}    = $base->{schema}->{table}->{$table}->{columns};
                 $self->{where}      = {};
                 $self->{order}      = [];
                 $self->{key}        = $base->{schema}->{table}->{$table}->{primary_key};
@@ -305,7 +306,7 @@ sub count {
 sub create {
     my $dbo     = shift;
     my $input   = shift || {};
-    my @columns = $dbo->_protect_sql(keys %{$dbo->{current}});
+    my @columns = $dbo->_protect_sql(@{$dbo->{columns}});
 
     die
       "Cannot create an entry in table ($dbo->{table}) without any input parameters."
@@ -349,7 +350,7 @@ sub read {
         @columns = $dbo->_protect_sql(@{$dbo->{select}});
     }
     else {
-        @columns = $dbo->_protect_sql(keys %{$dbo->{current}});
+        @columns = $dbo->_protect_sql(@{$dbo->{columns}});
     }
 
     # generate a where primary_key = ? clause
@@ -392,8 +393,10 @@ sub read {
         };
     }
 
-
     if (defined $dbo->{select}) {
+        
+        # create a fiticious collection :/
+        
         $dbo->{collection} = [
 
             map {
@@ -409,7 +412,7 @@ sub read {
 
               @{$dbo->{resultset}->()->hashes}
         ];
-        delete $dbo->{select};
+        
     }
     else {
         $dbo->{collection} = $dbo->{resultset}->()->hashes;
@@ -417,6 +420,8 @@ sub read {
 
     $dbo->{cursor} = 0;
     $dbo->next;
+    
+    $dbo->{select} = undef if defined $dbo->{select};
 
     return $dbo->error ? 0 : $dbo;
 }
@@ -427,7 +432,7 @@ sub update {
     my $input   = shift || {};
     my $where   = shift || {};
     my $table   = $dbo->{table};
-    my @columns = $dbo->_protect_sql(keys %{$dbo->{current}});
+    my @columns = $dbo->_protect_sql(@{$dbo->{columns}});
 
     # process direct input
     die
@@ -696,7 +701,7 @@ ORMesque - Lightweight To-The-Point ORM
 
 =head1 VERSION
 
-version 1.110421
+version 1.110422
 
 =head1 SYNOPSIS
 

@@ -2,7 +2,7 @@ NAME
     ORMesque - Lightweight To-The-Point ORM
 
 VERSION
-    version 1.110421
+    version 1.110422
 
 SYNOPSIS
         my $db = ORMesque->new('dbi:mysql:foo', 'root');
